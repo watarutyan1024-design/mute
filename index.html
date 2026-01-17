@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>mute - 宇宙への放流</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* 宇宙のきらめき */
+        .stars {
+            background: radial-gradient(circle at center, #ffffff 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .nav-item.active {
+            opacity: 1;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 流れ星のアニメーション */
+        @keyframes shooting-star {
+            0% { transform: translateX(0) translateY(0) rotate(-45deg) scale(0); opacity: 0; }
+            10% { opacity: 1; scale: 1; }
+            70% { opacity: 1; }
+            100% { transform: translateX(-500px) translateY(500px) rotate(-45deg) scale(0); opacity: 0; }
+        }
+
+        .shooting-star {
+            position: absolute;
+            width: 100px;
+            height: 2px;
+            background: linear-gradient(90deg, white, transparent);
+            animation: shooting-star 2s linear forwards;
+            pointer-events: none;
+        }
+
+        /* 飛行船/人工衛星のアニメーション */
+        @keyframes airship-drift {
+            from { transform: translateX(-100px); opacity: 0; }
+            10% { opacity: 0.4; }
+            90% { opacity: 0.4; }
+            to { transform: translateX(calc(100vw + 100px)); opacity: 0; }
+        }
+
+        .airship {
+            position: absolute;
+            animation: airship-drift 20s linear forwards;
+            pointer-events: none;
+            color: white;
+            opacity: 0;
+        }
+
+        /* カスタムスクロールバー非表示 */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 overflow-hidden">
+
+    <!-- 背景装飾 -->
+    <div id="celestial-canvas" class="fixed inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute inset-0 stars opacity-10"></div>
+        <div id="bg-gradient" class="absolute inset-0 bg-gradient-to-b from-blue-900/20 to-transparent transition-colors duration-1000"></div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="app" class="relative z-10 h-screen flex flex-col">
+        
+        <!-- ヘッダー -->
+        <header class="px-6 pt-8 pb-4 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-light tracking-tighter">mute</h1>
+                <p class="text-[10px] text-slate-500 tracking-[0.2em] uppercase">Space Drift</p>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                <div id="theme-indicator" class="w-2 h-2 rounded-full bg-blue-500"></div>
+                <span id="user-id" class="text-[10px] text-slate-400 font-mono tracking-tighter">connecting...</span>
+            </div>
+        </header>
+
+        <!-- ビューコンテナ -->
+        <main id="view-container" class="flex-1 overflow-y-auto px-4 pb-32">
+            <!-- コンテンツはJSで動的に挿入 -->
+        </main>
+
+        <!-- ボトムナビゲーション -->
+        <nav class="fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-white/10 px-6 pt-4 safe-area-bottom z-50">
+            <div class="max-w-md mx-auto flex justify-between items-center pb-4">
+                <button onclick="switchTab('drift')" class="nav-item flex flex-col items-center gap-1 text-slate-500 opacity-60 transition-all" data-tab="drift">
+                    <i data-lucide="wind" class="w-6 h-6"></i>
+                    <span class="text-[10px]">漂流</span>
+                </button>
+                <button onclick="switchTab('throw')" class="flex flex-col items-center gap-1 -mt-12 w-14 h-14 rounded-full bg-blue-600 text-white shadow-xl shadow-blue-900/40 border-4 border-slate-950 transition-transform active:scale-90" id="fab">
+                    <i data-lucide="plus" class="w-8 h-8"></i>
+                </button>
+                <button onclick="switchTab('settings')" class="nav-item flex flex-col items-center gap-1 text-slate-500 opacity-60 transition-all" data-tab="settings">
+                    <i data-lucide="settings" class="w-6 h-6"></i>
+                    <span class="text-[10px]">設定</span>
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- エコー（コメント）モーダル -->
+    <div id="echo-modal" class="fixed inset-0 bg-slate-950/95 z-[100] hidden items-center justify-center p-6 backdrop-blur-sm">
+        <div class="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-light">エコーを響かせる</h3>
+                <button onclick="closeEchoModal()" class="text-slate-500"><i data-lucide="x"></i></button>
+            </div>
+            <div id="target-post-text" class="text-sm text-slate-400 italic mb-6 border-l-2 border-white/10 pl-4"></div>
+            <textarea id="echo-input" placeholder="そっと寄り添う言葉を..." class="w-full h-32 bg-white/5 border border-white/10 rounded-xl p-4 text-slate-200 focus:outline-none focus:border-blue-500/50 resize-none mb-4"></textarea>
+            <button id="send-echo-btn" class="w-full py-4 bg-blue-600 rounded-xl font-medium active:scale-95 transition-transform">響かせる</button>
+        </div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Config ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mute-html-app';
+
+        // --- State ---
+        let currentUser = null;
+        let currentTab = 'drift';
+        let posts = [];
+        let displayName = localStorage.getItem('mute_name') || '名もなき星';
+        let theme = localStorage.getItem('mute_theme') || 'blue';
+
+        const themes = {
+            blue: { accent: 'text-blue-400', btn: 'bg-blue-600', grad: 'from-blue-900/20', border: 'border-blue-500/30' },
+            purple: { accent: 'text-purple-400', btn: 'bg-purple-600', grad: 'from-purple-900/20', border: 'border-purple-500/30' },
+            rose: { accent: 'text-rose-400', btn: 'bg-rose-600', grad: 'from-rose-900/20', border: 'border-rose-500/30' },
+            amber: { accent: 'text-amber-400', btn: 'bg-amber-600', grad: 'from-amber-900/20', border: 'border-amber-500/30' }
+        };
+
+        // --- Celestial Effects (Random Events) ---
+        const spawnShootingStar = () => {
+            const canvas = document.getElementById('celestial-canvas');
+            const star = document.createElement('div');
+            star.className = 'shooting-star';
+            star.style.top = Math.random() * 50 + '%';
+            star.style.right = Math.random() * 30 + '%';
+            canvas.appendChild(star);
+            setTimeout(() => star.remove(), 2500);
+        };
+
+        const spawnAirship = () => {
+            const canvas = document.getElementById('celestial-canvas');
+            const ship = document.createElement('div');
+            ship.className = 'airship';
+            ship.style.top = (20 + Math.random() * 60) + '%';
+            // Use an icon for the airship/satellite
+            ship.innerHTML = '<i data-lucide="satellite" class="w-4 h-4"></i>';
+            canvas.appendChild(ship);
+            lucide.createIcons();
+            setTimeout(() => ship.remove(), 21000);
+        };
+
+        // Randomly trigger events
+        setInterval(() => {
+            if (Math.random() > 0.7) spawnShootingStar();
+        }, 8000);
+
+        setInterval(() => {
+            if (Math.random() > 0.8) spawnAirship();
+        }, 15000);
+
+        // --- Auth (Rule 3) ---
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('user-id').textContent = user.uid.slice(0, 8);
+                listenToPosts();
+            }
+        });
+
+        // --- Firestore (Rule 1 & 2) ---
+        const listenToPosts = () => {
+            if (!currentUser) return;
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'posts'));
+            onSnapshot(q, (snapshot) => {
+                posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+                    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                render();
+            }, (err) => console.error(err));
+        };
+
+        // --- UI Logic ---
+        window.switchTab = (tab) => {
+            currentTab = tab;
+            render();
+        };
+
+        const render = () => {
+            const container = document.getElementById('view-container');
+            const fab = document.getElementById('fab');
+            const themeIndicator = document.getElementById('theme-indicator');
+            const bgGrad = document.getElementById('bg-gradient');
+            
+            // Apply Theme
+            const t = themes[theme];
+            themeIndicator.className = `w-2 h-2 rounded-full ${t.btn}`;
+            fab.className = `flex flex-col items-center gap-1 -mt-12 w-14 h-14 rounded-full ${t.btn} text-white shadow-xl border-4 border-slate-950 transition-transform active:scale-90`;
+            bgGrad.className = `absolute inset-0 bg-gradient-to-b ${t.grad} to-transparent transition-colors duration-1000`;
+
+            // Update Nav
+            document.querySelectorAll('.nav-item').forEach(el => {
+                if(el.dataset.tab === currentTab) {
+                    el.classList.add(t.accent);
+                    el.classList.remove('text-slate-500', 'opacity-60');
+                } else {
+                    el.classList.remove(t.accent, 'text-blue-400', 'text-purple-400', 'text-rose-400', 'text-amber-400');
+                    el.classList.add('text-slate-500', 'opacity-60');
+                }
+            });
+
+            container.innerHTML = '';
+
+            if (currentTab === 'drift') {
+                if (posts.length === 0) {
+                    container.innerHTML = `<div class="py-20 text-center text-slate-600 italic">宇宙はまだ静かだ...</div>`;
+                } else {
+                    posts.forEach(post => {
+                        const card = document.createElement('div');
+                        card.className = `p-6 mb-4 rounded-2xl border ${t.border} bg-white/5 backdrop-blur-sm fade-in`;
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-xs uppercase tracking-widest ${t.accent}">${post.authorName || '匿名'}</span>
+                                <span class="text-[10px] text-slate-500">${post.createdAt ? new Date(post.createdAt.seconds*1000).toLocaleTimeString() : 'now'}</span>
+                            </div>
+                            <p class="text-lg font-light leading-relaxed mb-6 whitespace-pre-wrap">${post.text}</p>
+                            <div class="flex gap-4">
+                                <button onclick="likePost('${post.id}')" class="flex items-center gap-2 text-slate-400 hover:text-rose-400 transition-colors">
+                                    <i data-lucide="heart" class="w-4 h-4 ${post.likes > 0 ? 'fill-rose-400 text-rose-400' : ''}"></i>
+                                    <span class="text-xs">${post.likes || 0}</span>
+                                </button>
+                                <button onclick="openEchoModal('${post.id}')" class="flex items-center gap-2 text-slate-400">
+                                    <i data-lucide="message-circle" class="w-4 h-4"></i>
+                                    <span class="text-xs">${post.echoes?.length || 0}</span>
+                                </button>
+                            </div>
+                            ${post.echoes?.length > 0 ? `
+                                <div class="mt-4 pt-4 border-t border-white/5 space-y-2">
+                                    ${post.echoes.map(e => `
+                                        <div class="text-sm text-slate-400 bg-white/5 p-2 rounded-lg">
+                                            <span class="text-[10px] ${t.accent} mr-2">${e.authorName}:</span>${e.text}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        `;
+                        container.appendChild(card);
+                    });
+                }
+            } else if (currentTab === 'throw') {
+                container.innerHTML = `
+                    <div class="flex flex-col gap-6 fade-in pt-4">
+                        <h2 class="text-xl font-light text-slate-400">言葉を放流する</h2>
+                        <textarea id="post-input" autofocus placeholder="今、どんな気分？" class="w-full h-48 bg-white/5 border border-white/10 rounded-2xl p-6 text-lg focus:outline-none focus:border-white/30 resize-none"></textarea>
+                        <button onclick="throwPost()" id="throw-btn" class="w-full py-4 rounded-xl flex items-center justify-center gap-2 font-medium ${t.btn}">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                            放流する
+                        </button>
+                    </div>
+                `;
+            } else if (currentTab === 'settings') {
+                container.innerHTML = `
+                    <div class="flex flex-col gap-8 fade-in pt-4">
+                        <div class="space-y-4">
+                            <label class="text-xs text-slate-500 uppercase tracking-widest">表示名</label>
+                            <input type="text" id="name-input" value="${displayName}" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 focus:outline-none focus:border-white/30">
+                        </div>
+                        <div class="space-y-4">
+                            <label class="text-xs text-slate-500 uppercase tracking-widest">宇宙のテーマ</label>
+                            <div class="grid grid-cols-4 gap-3">
+                                ${['blue', 'purple', 'rose', 'amber'].map(clr => `
+                                    <button onclick="setTheme('${clr}')" class="h-12 rounded-xl border-2 ${theme === clr ? 'border-white' : 'border-transparent'} ${themes[clr].btn}"></button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <button onclick="saveSettings()" class="w-full py-4 bg-white/10 rounded-xl">設定を保存</button>
+                    </div>
+                `;
+            }
+            lucide.createIcons();
+        };
+
+        // --- Actions ---
+        window.throwPost = async () => {
+            const text = document.getElementById('post-input').value;
+            if(!text.trim() || !currentUser) return;
+            
+            const btn = document.getElementById('throw-btn');
+            btn.disabled = true;
+            btn.opacity = 0.5;
+
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'posts'), {
+                text,
+                authorId: currentUser.uid,
+                authorName: displayName,
+                createdAt: serverTimestamp(),
+                likes: 0,
+                echoes: []
+            });
+            currentTab = 'drift';
+            render();
+        };
+
+        window.likePost = async (id) => {
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'posts', id);
+            await updateDoc(ref, { likes: increment(1) });
+        };
+
+        let activePostId = null;
+        window.openEchoModal = (id) => {
+            activePostId = id;
+            const post = posts.find(p => p.id === id);
+            document.getElementById('target-post-text').textContent = `"${post.text.slice(0, 40)}${post.text.length > 40 ? '...' : ''}"`;
+            document.getElementById('echo-modal').classList.replace('hidden', 'flex');
+        };
+
+        window.closeEchoModal = () => {
+            document.getElementById('echo-modal').classList.replace('flex', 'hidden');
+            document.getElementById('echo-input').value = '';
+        };
+
+        document.getElementById('send-echo-btn').onclick = async () => {
+            const text = document.getElementById('echo-input').value;
+            if(!text.trim() || !activePostId) return;
+
+            const post = posts.find(p => p.id === activePostId);
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'posts', activePostId);
+            
+            const newEchoes = [...(post.echoes || []), {
+                text,
+                authorName: displayName,
+                createdAt: new Date().toISOString()
+            }];
+
+            await updateDoc(ref, { echoes: newEchoes });
+            closeEchoModal();
+        };
+
+        window.setTheme = (t) => {
+            theme = t;
+            render();
+        };
+
+        window.saveSettings = () => {
+            displayName = document.getElementById('name-input').value || '名もなき星';
+            localStorage.setItem('mute_name', displayName);
+            localStorage.setItem('mute_theme', theme);
+            currentTab = 'drift';
+            render();
+        };
+
+        // Initialize
+        initAuth();
+        render();
+
+    </script>
+</body>
+</html>
